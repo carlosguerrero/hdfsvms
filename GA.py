@@ -24,7 +24,7 @@ class GA:
     
     
     
-    def __init__(self, system):
+    def __init__(self, system,populationSeed,evolutionSeed):
         
         
         
@@ -37,12 +37,17 @@ class GA:
         self.rndPOP = random.Random()
         self.rndEVOL = random.Random()
         
+        self.rndPOP.seed(populationSeed)
+        self.rndEVOL.seed(evolutionSeed)
+        
         
         self.optimizationAlgorithm = 'NSGA2' # NSGA2 or AIA
         
         #indicates the decision variables of the optimization: only blocks, only vms or boths.
         self.experimentScenario = 'BOTH' # BOTH VM or BLOCK
-        
+        self.mutationLevel = 'RADICAL' # RADICAL or CONSERVATIVE
+        self.mutationType = 'DOUBLE' # SINGLE or DOUBLE
+        self.unavailabilityObjective = True # True or False
 #        self.initialGeneration = 'ADJUSTED' # or RANDOM
 #        
 #        
@@ -60,7 +65,7 @@ class GA:
 
 
 
-    def selectSolution(self, population):
+    def selectSolution(self, population, ew, rw, uw):
         
         energy = []
         resourcewaste = []
@@ -68,37 +73,59 @@ class GA:
         for i in range(0,len(population.fitness)):
             energy.append(population.fitness[i]['energy'])
             resourcewaste.append(population.fitness[i]['resourcewaste'])
-            unavailability.append(population.fitness[i]['unavailability'])
+            if self.unavailabilityObjective == True:
+                unavailability.append(population.fitness[i]['unavailability'])
             
         minenergy = min(energy)
         minresourcewaste = min(resourcewaste)
-        minunavailability = min(unavailability)
+        if self.unavailabilityObjective == True:
+            minunavailability = min(unavailability)
         
         diffenergy = max(energy) - minenergy
         diffresourcewaste = max(resourcewaste) - minresourcewaste
-        diffunavailability = max(unavailability) - minunavailability
+        if self.unavailabilityObjective == True:
+            diffunavailability = max(unavailability) - minunavailability
+
         
-        myWeight = 3.0
+        #myWeight = 3.0
         
         fitness = []
         
         for i,v in enumerate(energy):
         
-            if (diffenergy) > 0:
-                energyValue = (1.0/myWeight) * ((energy[i]-minenergy)/diffenergy)
+            if diffenergy == float('inf'):
+                #energyValue = float('inf')
+                energyValue = 1.0*(ew)
             else:
-                energyValue = 1.0*(1.0/myWeight)
+                if (diffenergy) > 0:
+                    energyValue = (ew) * ((energy[i]-minenergy)/diffenergy)
+                else:
+                    energyValue = 1.0*(ew)
             
-            if (diffresourcewaste) > 0:
-                resourcewasteValue = (1.0/myWeight) * ((resourcewaste[i]-minresourcewaste)/diffresourcewaste)
-            else:
-                resourcewasteValue = 1.0*(1.0/myWeight)
+            if diffresourcewaste == float('inf'):
+                #resourcewasteValue = float('inf')
+                resourcewasteValue = 1.0*(rw)
+            else:            
+                if (diffresourcewaste) > 0:
+                    resourcewasteValue = (rw) * ((resourcewaste[i]-minresourcewaste)/diffresourcewaste)
+                else:
+                    resourcewasteValue = 1.0*(rw)
 
-            if (diffunavailability) > 0:
-                unavailabilityValue = (1.0/myWeight) * ((unavailability[i]-minunavailability)/diffunavailability)
+            if self.unavailabilityObjective == True:
+                if diffunavailability == float('inf'):
+                    #unavailabilityValue = float('inf')
+                    unavailabilityValue = 1.0*(uw)
+                else:            
+                    if (diffunavailability) > 0:
+                        unavailabilityValue = (uw) * ((unavailability[i]-minunavailability)/diffunavailability)
+                    else:
+                        unavailabilityValue = 1.0*(uw)
             else:
-                unavailabilityValue = 1.0*(1.0/myWeight)
-        
+                unavailabilityValue = 0.0
+            
+
+
+            population.fitnessNormalized[i]={'energy': energyValue, 'resourcewaste': resourcewasteValue, 'unavailability': unavailabilityValue, 'fitness': energyValue+resourcewasteValue+unavailabilityValue}
             fitness.append(energyValue+resourcewasteValue+unavailabilityValue)
             
             
@@ -149,6 +176,14 @@ class GA:
         vm_i = self.rndEVOL.randint(0,len(child['vm'])-1)
         child['vm'][vm_i] = self.rndEVOL.randint(0,self.system.pmNumber-1)
 
+    def VmRadicalReplace(self,child):
+        
+        for vm_i in range(0,len(child['vm'])):
+            if self.rndEVOL.random()>0.5:
+                child['vm'][vm_i] = self.rndEVOL.randint(0,self.system.pmNumber-1)
+        self.removeEmptyVms(child)
+#        print "vm mutated"
+
     def BlockSwap2(self,child):
 
         block_is = self.rndEVOL.sample(xrange(0,len(child['block'])/self.system.replicationFactor),2)
@@ -184,35 +219,93 @@ class GA:
         child['block'][block_i] = self.rndEVOL.randint(0,len(child['vm'])-1)        
 
         self.removeEmptyVms(child)
+
+    def BlockRadicalReplace(self,child):
+        
+        for block_i in range(0, (len(child['block'])/self.system.replicationFactor)):
+            if self.rndEVOL.random() > 0.5:
+                vm_is = self.rndEVOL.sample(xrange(0,len(child['vm'])),self.system.replicationFactor)      
+                for i in range(0,self.system.replicationFactor):
+                    child['block'][(block_i*self.system.replicationFactor)+i] = vm_is[i]                     
+        self.removeEmptyVms(child)
+#        print "block mutated"
+
+
+
+        
+    
+    def mutateBlock(self,child):
+        
+        mutationOperators = [] 
+        if self.mutationLevel=='CONSERVATIVE':
+            print "ERRRORRRRR"
+            mutationOperators.append(self.BlockSwap2)
+            mutationOperators.append(self.BlockReplace2)
+        if self.mutationLevel=='RADICAL':
+            mutationOperators.append(self.BlockRadicalReplace)
+
+        mutationOperators[self.rndEVOL.randint(0,len(mutationOperators)-1)](child)
+
+        
+    def mutateVm(self,child):
+        mutationOperators = [] 
+        if self.mutationLevel=='CONSERVATIVE':
+            mutationOperators.append(self.VmGrowth)
+            mutationOperators.append(self.VmShrink)
+            mutationOperators.append(self.VmSwap)
+            mutationOperators.append(self.VmReplace)
+        if self.mutationLevel=='RADICAL':
+            mutationOperators.append(self.VmRadicalReplace)
+
+        mutationOperators[self.rndEVOL.randint(0,len(mutationOperators)-1)](child)
+    
                 
     def mutate(self,child):
         #print "[Offsrping generation]: Mutation in process**********************"
 
+        mutationOperators = [] 
+        if self.mutationLevel=='CONSERVATIVE':
+            if self.experimentScenario=='BOTH':
+                mutationOperators.append(self.VmGrowth)
+                mutationOperators.append(self.VmShrink)
+                mutationOperators.append(self.VmSwap)
+                mutationOperators.append(self.VmReplace)
+                mutationOperators.append(self.BlockSwap2)
+                mutationOperators.append(self.BlockReplace2)
+            if self.experimentScenario=='VM': 
+                mutationOperators.append(self.VmGrowth)
+                mutationOperators.append(self.VmShrink)
+                mutationOperators.append(self.VmSwap)
+                mutationOperators.append(self.VmReplace)
+            if self.experimentScenario=='BLOCK': 
+                mutationOperators.append(self.BlockSwap2)
+                mutationOperators.append(self.BlockReplace2)
 
-        if self.experimentScenario=='BOTH':
-            mutationOperators = [] 
-            mutationOperators.append(self.VmGrowth)
-            mutationOperators.append(self.VmShrink)
-            mutationOperators.append(self.VmSwap)
-            mutationOperators.append(self.VmReplace)
-            mutationOperators.append(self.BlockSwap2)
-            mutationOperators.append(self.BlockReplace2)
+        if self.mutationLevel=='RADICAL':
+            if self.experimentScenario=='BOTH':
+                mutationOperators.append(self.VmRadicalReplace)
+                mutationOperators.append(self.BlockRadicalReplace)
+            if self.experimentScenario=='VM':
+                mutationOperators.append(self.VmRadicalReplace)
 
-        if self.experimentScenario=='VM':
-            mutationOperators = [] 
-            mutationOperators.append(self.VmGrowth)
-            mutationOperators.append(self.VmShrink)
-            mutationOperators.append(self.VmSwap)
-            mutationOperators.append(self.VmReplace)
+            if self.experimentScenario=='BLOCK':
+                mutationOperators.append(self.BlockRadicalReplace)
 
-        if self.experimentScenario=='BLOCK':
-            mutationOperators = [] 
-            mutationOperators.append(self.BlockSwap2)
-            mutationOperators.append(self.BlockReplace2)
+            
+        if self.mutationType == 'SINGLE':
+            mutationOperators[self.rndEVOL.randint(0,len(mutationOperators)-1)](child)
 
+        if self.mutationType == 'DOUBLE':
+#            if self.duplicatedReplicaInVM(child['block'],0):
+#                print "jodido antes de empezar"            
+            self.mutateVm(child)
+#            if self.duplicatedReplicaInVM(child['block'],0):
+#                print "jodido al mutar VM"
+            self.mutateBlock(child)
+#            if self.duplicatedReplicaInVM(child['block'],0):
+#                print "jodido al mutar BLOCK"            
 
-      
-        mutationOperators[self.rndEVOL.randint(0,len(mutationOperators)-1)](child)
+        
     
 
 #******************************************************************************************
@@ -225,8 +318,21 @@ class GA:
 #******************************************************************************************
 
 
-
     def normalizeBlockAllocatedToNonExistingVMs(self,blockCh,limit):
+        for i in range(0,len(blockCh)):
+            v = blockCh[i]
+            if v>=limit:
+                oldVm = v
+                vmcandidate = oldVm % limit
+                blockreplicasetNumber = i/self.system.replicationFactor
+                theothersVms = set(blockCh[blockreplicasetNumber*self.system.replicationFactor:blockreplicasetNumber*self.system.replicationFactor+self.system.replicationFactor])
+                while vmcandidate in theothersVms:
+                    oldVm +=1
+                    vmcandidate = oldVm % limit
+                blockCh[i] = vmcandidate
+
+
+    def OLDnormalizeBlockAllocatedToNonExistingVMs(self,blockCh,limit):
         for i,v in enumerate(blockCh):
             if v>=limit:
                 blockCh[i] = v % limit
@@ -234,16 +340,26 @@ class GA:
 
     def crossoverBOTH2(self,f1,f2,offs):
 
+
+
+        
         
         c1 = copy.deepcopy(f1)
         c2 = copy.deepcopy(f2)
         
-        cuttingPoint = self.rndEVOL.randint(1,len(c1['block'])-1)
+#        if self.duplicatedReplicaInVM(c1['block'],0):
+#            print "jodido YA ANTES DE cruzar hijo 1"
+#        if self.duplicatedReplicaInVM(c2['block'],0):
+#            print "jodido YA ANTES DE cruzar hijo 2"
+
+        cuttingPoint1 = self.rndEVOL.randint(1,len(c1['block'])-1)
+#        cuttingPoint1 = self.rndEVOL.randint(1,(len(c1['block'])/self.system.replicationFactor)-1)
+#        cuttingPoint1 = cuttingPoint1 * self.system.replicationFactor
         
         #apply one-point cutting point to the block-chromosome
 
-        newblockCh1 = c1['block'][:cuttingPoint] + c2['block'][cuttingPoint:]
-        newblockCh2 = c2['block'][:cuttingPoint] + c1['block'][cuttingPoint:]
+        newblockCh1 = c1['block'][:cuttingPoint1] + c2['block'][cuttingPoint1:]
+        newblockCh2 = c2['block'][:cuttingPoint1] + c1['block'][cuttingPoint1:]
         
         cuttingPoint = self.rndEVOL.randint(1,min(len(c1['vm']),len(c2['vm']))-1)
         
@@ -272,6 +388,24 @@ class GA:
         self.removeEmptyVms(c1)
         self.removeEmptyVms(c2)
 
+#        if self.duplicatedReplicaInVM(c1['block'],0):
+#            print f1['block'][2919:2925]
+#            print f2['block'][2919:2925]
+#            print c1['block'][2919:2925]
+#            print c2['block'][2919:2925]
+#            print "jodido al cruzar hijo 1"
+#            print cuttingPoint1
+#            print f1['block'][cuttingPoint1-3:cuttingPoint1+3]
+#            print f2['block'][cuttingPoint1-3:cuttingPoint1+3]
+#            print c1['block'][cuttingPoint1-3:cuttingPoint1+3]
+#            print c2['block'][cuttingPoint1-3:cuttingPoint1+3]
+#        if self.duplicatedReplicaInVM(c2['block'],0):
+#            print "jodido al cruzar hijo 2"
+#            print cuttingPoint1
+#            print f1['block'][cuttingPoint1-3:cuttingPoint1+3]
+#            print f2['block'][cuttingPoint1-3:cuttingPoint1+3]
+#            print c1['block'][cuttingPoint1-3:cuttingPoint1+3]
+#            print c2['block'][cuttingPoint1-3:cuttingPoint1+3]            
 
         offs.append(c1)
         #print "[Offsrping generation]: Children 1 added **********************"
@@ -506,7 +640,7 @@ class GA:
         
         
 #checking vm has less resource usages than their templates        
-
+ 
         for vm_i in range(0,len(pop.population[index]['vmtype'])):
             
             vmtemplate = self.system.vmTemplate[pop.population[index]['vmtype'][vm_i]]
@@ -537,11 +671,14 @@ class GA:
         limit = len(blockChromosome)
         while i < limit:
             
-            replicas = set(blockChromosome[i:i+self.system.replicationFactor])
-            if len(replicas)<self.system.replicationFactor:
-#                print "Duplicated block in solution "+str(solnumber)+ " and piece "+str(i)
+#            replicas = set(blockChromosome[i:i+self.system.replicationFactor])
+#            if len(replicas)<self.system.replicationFactor:
+
+            if len(set(blockChromosome[i:i+self.system.replicationFactor]))<len(blockChromosome[i:i+self.system.replicationFactor]):
+
+                print "Duplicated block in solution "+str(solnumber)+ " and piece "+str(i)
 #                print blockChromosome[i:i+self.system.replicationFactor]
-#                print blockChromosome
+                #print blockChromosome
                 return True
             i+=self.system.replicationFactor
         return False
@@ -550,7 +687,7 @@ class GA:
     def checkConstraints(self,pop, index):
              
         if self.duplicatedReplicaInVM(pop.population[index]['block'],index):
-#            print("duplicatedReplica")
+            print("duplicatedReplica")
             return False
         if not self.resourceUsages(pop,index):
             print("resourceUsages")
@@ -752,7 +889,7 @@ class GA:
         energyConsumption = 0.0        
         for i in range(0,self.system.pmNumber):
             
-            Prh = self.system.pmDefinition[i]['energyMax'] - self.system.pmDefinition[i]['eneryIdle']
+            Prh = self.system.pmDefinition[i]['energyMax'] - self.system.pmDefinition[i]['energyIdle']
             
             cpuUsage = solutionPmsUsages['cpu'][i] / self.system.pmDefinition[i]['cpu']
             netUsage = solutionPmsUsages['net'][i] / self.system.pmDefinition[i]['net']
@@ -763,8 +900,8 @@ class GA:
             else:
                 energyCPU = self.system.pmDefinition[i]['energyBeta'] * Prh + (1 - self.system.pmDefinition[i]['energyBeta']) * Prh * cpuUsage
 
-            energyNET = self.system.pmDefinition[i]['eneryGamma'] * Prh * netUsage
-            energyIO = self.system.pmDefinition[i]['eneryDelta'] * Prh * ioUsage
+            energyNET = self.system.pmDefinition[i]['energyGamma'] * Prh * netUsage
+            energyIO = self.system.pmDefinition[i]['energyDelta'] * Prh * ioUsage
 
 #            print energyCPU            
 #            print energyNET
@@ -800,12 +937,14 @@ class GA:
         
         if self.checkConstraints(pop,index):
             chr_fitness["energy"] = self.calculateEnergy(pmsUsages)
-            chr_fitness["unavailability"] = self.calculateUnavailability2(chromosome,pmsUsages,vmsUsages)
+            if self.unavailabilityObjective == True:
+                chr_fitness["unavailability"] = self.calculateUnavailability2(chromosome,pmsUsages,vmsUsages)
             chr_fitness["resourcewaste"] = self.calculateResourceWaste(pmsUsages)
         else:
 #            print ("not constraints")
             chr_fitness["energy"] = float('inf')
-            chr_fitness["unavailability"] = float('inf')
+            if self.unavailabilityObjective == True:
+                chr_fitness["unavailability"] = float('inf')
             chr_fitness["resourcewaste"] = float('inf')
             
         return chr_fitness

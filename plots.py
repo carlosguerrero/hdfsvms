@@ -27,9 +27,9 @@ class PLOTS:
 
         self.totalplots = []
         self.totalplots.append({"decisionvariables": 'BOTH' ,"optimization": 'NSGA2' ,"configuration": 'lowScale', "color": 'yellow', "marker": '*'})
-        self.totalplots.append({"decisionvariables": 'VM' ,"optimization": 'NSGA2' ,"configuration": 'lowScale', "color": 'green', "marker": 'o'})
+        #self.totalplots.append({"decisionvariables": 'VM' ,"optimization": 'NSGA2' ,"configuration": 'lowScale', "color": 'green', "marker": 'o'})
         #self.totalplots.append({"decisionvariables": 'BLOCK' ,"optimization": 'NSGA2' ,"configuration": 'lowScale', "color": 'red', "marker": '^'})
-        #self.totalplots.append({"decisionvariables": 'BLOCK' ,"optimization": 'AIA' ,"configuration": 'lowScale', "color": 'blue', "marker": 's'})
+        self.totalplots.append({"decisionvariables": 'BLOCK' ,"optimization": 'AIA' ,"configuration": 'lowScale', "color": 'blue', "marker": 's'})
 
 
         self.folderpath=folder

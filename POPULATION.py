@@ -17,6 +17,7 @@ class POPULATION:
         r.vmsUsages = copy.deepcopy(a.vmsUsages) + copy.deepcopy(b.vmsUsages)
         r.pmsUsages = copy.deepcopy(a.pmsUsages) + copy.deepcopy(b.pmsUsages)
         r.fitness = copy.deepcopy(a.fitness) + copy.deepcopy(b.fitness)
+        r.fitnessNormalized = copy.deepcopy(a.fitnessNormalized) + copy.deepcopy(b.fitnessNormalized)
         for i,v in enumerate(r.fitness):
             r.fitness[i]["index"]=i
         r.dominatesTo = copy.deepcopy(a.dominatesTo) + copy.deepcopy(b.dominatesTo)
@@ -36,6 +37,7 @@ class POPULATION:
         for i in paretoPop.fronts[0]:
             paretoPop.population[i] = copy.deepcopy(self.population[i])
             paretoPop.fitness[i] = copy.deepcopy(self.fitness[i])
+            paretoPop.fitnessNormalized[i] = copy.deepcopy(self.fitnessNormalized[i])
             paretoPop.vmsUsages[i] = copy.deepcopy(self.vmsUsages[i])
             paretoPop.pmsUsages[i] = copy.deepcopy(self.pmsUsages[i])
             
@@ -48,6 +50,7 @@ class POPULATION:
         
         self.population = [{}]*size
         self.fitness = [{}]*size
+        self.fitnessNormalized = [{}]*size
         self.dominatesTo = [set()]*size
         self.dominatedBy = [set()]*size
         self.fronts = [set()]*size
