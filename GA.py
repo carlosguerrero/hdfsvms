@@ -142,15 +142,13 @@ class GA:
 #******************************************************************************************
 
 
-
-
     def VmGrowth(self,child):
         
         child['vm'].append(self.rndEVOL.randint(0,self.system.pmNumber-1))
         child['vmtype'].append(self.rndEVOL.randint(0,len(self.system.vmTemplate)-1))
         child['block'][self.rndEVOL.randint(0,len(child['block'])-1)] = len(child['vm'])-1        
 
-        self.removeEmptyVms(child)
+        #self.removeEmptyVms(child)
 
         
     def VmShrink(self,child):
@@ -160,7 +158,15 @@ class GA:
         
         for i,v in enumerate(child['block']):
             if v == vm_i:
-                child['block'][i] = self.rndEVOL.randint(0,len(child['vm'])-1)  
+                
+                replicasetId = i / self.system.replicationFactor
+                replicasetIni = replicasetId * self.system.replicationFactor
+                replicasetEnd = replicasetIni + self.system.replicationFactor
+                replicaset = set(child['block'][replicasetIni:replicasetEnd])
+                newvm = self.rndEVOL.randint(0,len(child['vm'])-1)
+                while newvm in replicaset:
+                    newvm = self.rndEVOL.randint(0,len(child['vm'])-1)
+                child['block'][i] = newvm
             elif v>vm_i:
                 child['block'][i] -= 1
           
@@ -232,7 +238,8 @@ class GA:
 
 
 
-        
+
+      
     
     def mutateBlock(self,child):
         
@@ -255,6 +262,12 @@ class GA:
             mutationOperators.append(self.VmSwap)
             mutationOperators.append(self.VmReplace)
         if self.mutationLevel=='RADICAL':
+            print "SIIIIII lo estamos haciendo"
+            modifyNumberRnd = self.rndEVOL.random()
+            if (modifyNumberRnd < 1./3.):
+                self.VmGrowth(child)
+            if (modifyNumberRnd > 1./3.):
+                self.VmShrink(child)
             mutationOperators.append(self.VmRadicalReplace)
 
         mutationOperators[self.rndEVOL.randint(0,len(mutationOperators)-1)](child)
